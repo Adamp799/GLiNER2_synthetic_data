@@ -1,0 +1,50 @@
+# Keys and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+secrets.*
+*_secret*
+*_secrets*
+api_key*
+*.credentials
+.env.local
+.env.*.local
+
+# Jupyter
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+# Optional: uncomment to ignore notebook outputs (or use nbstripout before commit)
+# *.ipynb
+
+# Common results/output dirs (if notebooks write here)
+results/
+output/
+outputs/
+*.pkl
+*.pickle
+*.joblib
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

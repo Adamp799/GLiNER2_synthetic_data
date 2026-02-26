@@ -1,0 +1,80 @@
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The meeting lasted for one hour and covered all agenda items.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "The product worked flawlessly and exceeded expectations.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The software kept crashing and losing my work.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
+{"input": "The package arrived on the expected delivery date.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["neutral"]}]}}
+{"input": "Customer support was quick and very helpful.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["positive"]}]}}
+{"input": "The service was slow and the staff were rude.", "output": {"classifications": [{"task": "sentiment", "labels": ["positive", "negative", "neutral"], "true_label": ["negative"]}]}}
