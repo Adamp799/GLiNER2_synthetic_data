@@ -186,7 +186,23 @@ class DataGenerator:
             parsed.json_extraction = True
 
         # Sentiment-specific hints
+        sentiment_hint = False
+
+        # Explicit mention of "sentiment"
         if "sentiment" in desc:
+            sentiment_hint = True
+
+        # Descriptions that talk about tone/emotion with the canonical
+        # sentiment label set but without using the word "sentiment",
+        # e.g. "classify whether the tone is positive, negative or neutral".
+        if (
+            not sentiment_hint
+            and all(lbl in desc for lbl in ["positive", "negative", "neutral"])
+            and any(kw in desc for kw in ["classify", "classification", "tone", "emotion"])
+        ):
+            sentiment_hint = True
+
+        if sentiment_hint:
             parsed.classification = True
             parsed.classification_task_name = "sentiment"
             parsed.classification_labels = ["positive", "negative", "neutral"]
