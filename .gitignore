@@ -23,6 +23,7 @@ api_key*
 results/
 output/
 outputs/
+output_gliner2_sentiment/
 *.pkl
 *.pickle
 *.joblib
