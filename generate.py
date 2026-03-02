@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+import os
 import random
 import re
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
-from typing import Dict, List, Literal, TypedDict
+from typing import Dict, List, Literal, Optional, TypedDict
 
 
 TaskType = Literal["ner", "classification", "relation_extraction", "json_extraction"]
@@ -34,18 +38,45 @@ class ParsedTask:
     classification_labels: List[str] | None = None
 
 
+TaskInferenceMode = Literal["rules", "llm"]
+
+
 class DataGenerator:
     """Generate GLiNER2-compatible synthetic training examples from a task description.
 
-    The generator is deliberately rule-based and does not require an external LLM.
+    By default the generator uses lightweight rules for task inference and
+    synthetic example construction. Optionally, task inference can be delegated
+    to a local LLM (e.g. an Ollama-served `llama3.2` model) while keeping the
+    rest of the pipeline unchanged.
+
     It focuses on:
-      - inferring which GLiNER2 task-types are relevant from a natural language description
+      - inferring which GLiNER2 task-types are relevant from a natural language
+        description
       - composing multi-task outputs into a single `output` dict
       - ensuring basic diversity and class balance for classification tasks
     """
 
-    def __init__(self, seed: int | None = None) -> None:
+    def __init__(
+        self,
+        seed: int | None = None,
+        task_inference_mode: TaskInferenceMode = "rules",
+        llm_model: str = "llama3.2",
+        llm_endpoint: str | None = None,
+    ) -> None:
         self._rng = random.Random(seed)
+        self._task_inference_mode: TaskInferenceMode = task_inference_mode
+        self._llm_model = llm_model
+        # Resolve the Ollama chat endpoint, preferring OLLAMA_HOST when set.
+        if llm_endpoint is None:
+            host = os.environ.get("OLLAMA_HOST") or "http://localhost:11434"
+            if not host.startswith(("http://", "https://")):
+                host = f"http://{host}"
+            if host.rstrip("/").endswith("/api/chat"):
+                self._llm_endpoint = host.rstrip("/")
+            else:
+                self._llm_endpoint = host.rstrip("/") + "/api/chat"
+        else:
+            self._llm_endpoint = llm_endpoint
 
     # ------------------------------------------------------------------
     # Public API
@@ -124,6 +155,21 @@ class DataGenerator:
     # Task inference
     # ------------------------------------------------------------------
     def _infer_tasks(self, description: str) -> ParsedTask:
+        """Infer tasks using either rule-based or LLM-based inference.
+
+        LLM-based inference is best-effort: if any error occurs while querying
+        the model or parsing its response, the method falls back to the
+        rule-based heuristic implementation.
+        """
+        if self._task_inference_mode == "llm":
+            llm_parsed = self._infer_tasks_via_llm(description)
+            if llm_parsed is not None:
+                return llm_parsed
+
+        # Default: rules (also used as a robust fallback).
+        return self._infer_tasks_rules(description)
+
+    def _infer_tasks_rules(self, description: str) -> ParsedTask:
         desc = description.lower()
         parsed = ParsedTask()
 
@@ -222,6 +268,112 @@ class DataGenerator:
 
         return parsed
 
+    def _infer_tasks_via_llm(self, description: str) -> Optional[ParsedTask]:
+        """Infer tasks using a local LLM exposed via an Ollama HTTP endpoint.
+
+        The LLM is prompted to return a strict JSON object with the same fields
+        as `ParsedTask`. Any failure to contact the model or parse its response
+        results in `None`, signalling that the caller should fall back to the
+        rule-based implementation.
+        """
+        prompt = (
+            "You are helping configure GLiNER2, a unified information "
+            "extraction model that supports four task types:\n"
+            "- ner\n- classification\n- relation_extraction\n- json_extraction\n\n"
+            "Given the user's natural language task description below, decide "
+            "which of these task types are required. Also infer, when "
+            "appropriate, a short classification task name and a small set of "
+            "classification labels.\n\n"
+            "Return ONLY a JSON object with the following fields and no extra "
+            "text:\n"
+            '{\n'
+            '  "ner": true | false,\n'
+            '  "classification": true | false,\n'
+            '  "relation_extraction": true | false,\n'
+            '  "json_extraction": true | false,\n'
+            '  "classification_task_name": string or null,\n'
+            '  "classification_labels": array of strings or null\n'
+            "}\n\n"
+            "Task description:\n"
+            f"{description}"
+        )
+
+        payload = {
+            "model": self._llm_model,
+            "messages": [
+                {"role": "system", "content": "You respond with JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+        }
+
+        body = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self._llm_endpoint,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                raw = response.read().decode("utf-8")
+        except (urllib.error.URLError, TimeoutError):
+            return None
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
+        # Ollama's /api/chat returns the assistant content under message.content.
+        message = data.get("message") or {}
+        content = message.get("content")
+        if not isinstance(content, str):
+            return None
+
+        try:
+            parsed_json = json.loads(content)
+        except json.JSONDecodeError:
+            return None
+
+        return self._parsed_task_from_dict(parsed_json)
+
+    @staticmethod
+    def _parsed_task_from_dict(data: Dict) -> ParsedTask | None:
+        """Convert a loose dict into a well-typed ParsedTask instance."""
+        try:
+            parsed = ParsedTask(
+                ner=bool(data.get("ner", False)),
+                classification=bool(data.get("classification", False)),
+                relation_extraction=bool(data.get("relation_extraction", False)),
+                json_extraction=bool(data.get("json_extraction", False)),
+                classification_task_name=data.get("classification_task_name"),
+                classification_labels=data.get("classification_labels"),
+            )
+        except TypeError:
+            return None
+
+        # Normalise optional fields
+        if not isinstance(parsed.classification_task_name, str):
+            parsed.classification_task_name = None
+        labels = parsed.classification_labels
+        if isinstance(labels, list):
+            parsed.classification_labels = [
+                str(l).strip() for l in labels if isinstance(l, str) and l.strip()
+            ] or None
+        else:
+            parsed.classification_labels = None
+
+        # Reuse the same defaulting logic as the rule-based path.
+        if parsed.classification:
+            if parsed.classification_task_name is None:
+                parsed.classification_task_name = "classification"
+            if parsed.classification_labels is None:
+                parsed.classification_labels = ["class_a", "class_b", "class_c"]
+
+        return parsed
+
     @staticmethod
     def _extract_label_list(text: str) -> List[str] | None:
         # patterns like "into A, B and C"
@@ -242,9 +394,42 @@ class DataGenerator:
     # NER example generation
     # ------------------------------------------------------------------
     def _generate_ner_example(self, idx: int) -> tuple[str, Dict[str, List[str]]]:
-        people = ["Alice Johnson", "Bob Smith", "Carlos Diaz", "Diana Lee"]
-        companies = ["Acme Corp", "Globex", "Innotech", "Fastino AI"]
-        locations = ["New York", "Berlin", "Tokyo", "San Francisco"]
+        people = [
+            "Alice Johnson",
+            "Bob Smith",
+            "Carlos Diaz",
+            "Diana Lee",
+            "Emily Chen",
+            "Farid Khan",
+            "Grace Hopper",
+            "Hannah Müller",
+            "Ivan Petrov",
+            "Julia Roberts",
+        ]
+        companies = [
+            "Acme Corp",
+            "Globex",
+            "Innotech",
+            "Fastino AI",
+            "Quantum Labs",
+            "NeuralForge",
+            "Skyline Analytics",
+            "Blue Ocean Systems",
+            "Aurora Robotics",
+            "Maple Leaf Software",
+        ]
+        locations = [
+            "New York",
+            "Berlin",
+            "Tokyo",
+            "San Francisco",
+            "Toronto",
+            "Singapore",
+            "Sydney",
+            "London",
+            "Paris",
+            "São Paulo",
+        ]
 
         person = self._rng.choice(people)
         company = self._rng.choice(companies)
@@ -252,8 +437,11 @@ class DataGenerator:
 
         templates = [
             f"{person} works as a data scientist at {company} in {location}.",
-            f"{company}, based in {location}, recently hired {person}.",
+            f"{company}, based in {location}, recently hired {person} to lead a new project.",
             f"In {location}, {person} presented new research from {company}.",
+            f"{person} joined {company} after relocating to {location} last year.",
+            f"At a tech conference in {location}, {person} showcased {company}'s latest platform.",
+            f"{company} opened a new office in {location}, where {person} now manages the team.",
         ]
         text = self._rng.choice(templates)
 
@@ -280,30 +468,10 @@ class DataGenerator:
         # Enforce approximate balance by cycling through labels.
         true_label = labels[idx % len(labels)]
 
-        # A small corpus of generic sentences keyed by label semantics
-        sentiment_bank = {
-            "positive": [
-                "The product worked flawlessly and exceeded expectations.",
-                "Customer support was quick and very helpful.",
-            ],
-            "negative": [
-                "The service was slow and the staff were rude.",
-                "The software kept crashing and losing my work.",
-            ],
-            "neutral": [
-                "The meeting lasted for one hour and covered all agenda items.",
-                "The package arrived on the expected delivery date.",
-            ],
-        }
-
-        if task_name == "sentiment" and true_label in sentiment_bank:
-            text = self._rng.choice(sentiment_bank[true_label])
+        if task_name == "sentiment" and true_label in {"positive", "negative", "neutral"}:
+            text = self._build_sentiment_text(true_label)
         else:
-            # Generic text for arbitrary labels
-            text = (
-                f"This example should be labeled as '{true_label}' for the "
-                f"{task_name} task."
-            )
+            text = self._build_generic_classification_text(task_name, true_label)
 
         classifications = [
             {
@@ -314,22 +482,134 @@ class DataGenerator:
         ]
         return text, classifications
 
+    def _build_sentiment_text(self, label: str) -> str:
+        """Compose a sentiment sentence from several small banks.
+
+        This yields a large combinatorial space of unique sentences while
+        keeping the semantics aligned with the target label.
+        """
+        subjects = [
+            "The mobile app",
+            "Customer support",
+            "The latest software update",
+            "The delivery service",
+            "The pricing model",
+            "The onboarding experience",
+            "The website checkout flow",
+            "The data export feature",
+        ]
+        positive_outcomes = [
+            "worked flawlessly and exceeded my expectations",
+            "was incredibly smooth from start to finish",
+            "saved me a lot of time every day",
+            "felt intuitive even for new team members",
+            "made our internal workflow much faster",
+            "replied quickly and solved my problem",
+            "offers great value for the subscription price",
+            "has become an essential tool for our team",
+        ]
+        negative_outcomes = [
+            "kept crashing in the middle of important work",
+            "was confusing and full of unexpected errors",
+            "made the checkout process painfully slow",
+            "left my support ticket unanswered for days",
+            "introduced several bugs that blocked our release",
+            "felt overpriced for the limited functionality",
+            "regularly lost my configuration changes",
+            "made it hard to complete even basic tasks",
+        ]
+        neutral_outcomes = [
+            "behaved largely as advertised without surprises",
+            "was acceptable but nothing particularly special",
+            "matched the standard we see in similar tools",
+            "delivered the expected functionality on time",
+            "required a short learning period but then felt routine",
+            "followed our usual internal approval process",
+            "met the requirements specified in the contract",
+            "ran for several weeks without noticeable incidents",
+        ]
+
+        subject = self._rng.choice(subjects)
+        if label == "positive":
+            outcome = self._rng.choice(positive_outcomes)
+        elif label == "negative":
+            outcome = self._rng.choice(negative_outcomes)
+        else:
+            outcome = self._rng.choice(neutral_outcomes)
+
+        return f"{subject} {outcome}."
+
+    def _build_generic_classification_text(self, task_name: str, true_label: str) -> str:
+        """Generic but varied text for non-sentiment classification tasks."""
+        contexts = [
+            "In this scenario, the example should be labeled as",
+            "For the following case, assign the label",
+            "Treat this short description as belonging to category",
+            "For the configured task, the correct label is",
+            "When training the model, mark this example with",
+        ]
+        domains = [
+            "a support ticket",
+            "a user question",
+            "a log line from a backend service",
+            "a short product description",
+            "an internal status update",
+            "a short customer email",
+            "a bug report summary",
+        ]
+
+        context = self._rng.choice(contexts)
+        domain = self._rng.choice(domains)
+        return (
+            f"{context} '{true_label}' for the {task_name} task. "
+            f"The text describes {domain} in a realistic setting."
+        )
+
     # ------------------------------------------------------------------
     # Relation extraction example generation
     # ------------------------------------------------------------------
     def _generate_relation_example(self, idx: int) -> tuple[str, List[Dict]]:
-        people = ["John", "Maria", "Ethan", "Sara"]
-        companies = ["Apple Inc.", "Fastino AI", "Globex", "Innotech"]
-        cities = ["London", "Paris", "Toronto", "San Francisco"]
+        people = [
+            "John",
+            "Maria",
+            "Ethan",
+            "Sara",
+            "Nina",
+            "Liam",
+            "Olivia",
+            "Noah",
+        ]
+        companies = [
+            "Apple Inc.",
+            "Fastino AI",
+            "Globex",
+            "Innotech",
+            "NeuralForge",
+            "Aurora Robotics",
+            "Blue Ocean Systems",
+        ]
+        cities = [
+            "London",
+            "Paris",
+            "Toronto",
+            "San Francisco",
+            "Berlin",
+            "New York",
+            "Singapore",
+        ]
 
         person = self._rng.choice(people)
         company = self._rng.choice(companies)
         city = self._rng.choice(cities)
 
-        text = (
+        templates = [
             f"{person} works for {company} and currently lives in {city}. "
-            f"In the past, {person} also collaborated with other startups."
-        )
+            f"In the past, {person} also collaborated with several startups.",
+            f"After moving to {city}, {person} accepted an offer from {company}.",
+            f"{company} recently transferred {person} to its {city} office.",
+            f"{person} has been living in {city} ever since joining {company}.",
+        ]
+        text = self._rng.choice(templates)
 
         relations = [
             {"works_for": {"head": person, "tail": company}},
@@ -345,6 +625,12 @@ class DataGenerator:
             ("iPhone 15 Pro Max", "256GB", "$1199"),
             ("Pixel 9", "128GB", "$899"),
             ("Galaxy S25", "512GB", "$1399"),
+            ("ThinkPad X1 Carbon", "16GB RAM / 1TB SSD", "$1899"),
+            ("MacBook Air M4", "8GB RAM / 512GB SSD", "$1499"),
+            ("Surface Pro 11", "16GB RAM / 512GB SSD", "$1699"),
+            ("Kindle Paperwhite Pro", "32GB", "$249"),
+            ("Oculus Quest Ultra", "256GB", "$699"),
+            ("Apple Watch Series 11", "128GB", "$499"),
         ]
         name, storage, price = self._rng.choice(products)
 
