@@ -208,12 +208,24 @@ class DataGenerator:
                 "ner",
                 "named entity",
                 "highlight",
+                "identify entities",
+                "find entities",
+                "tag entities",
+                "tag names",
+                "annotate entities",
+                "recognize entities",
+                "detect entities",
+                "locate entities",
+                "label entities",
+                "identify names",
+                "find names",
+                "annotate",
             ]
         ):
             parsed.ner = True
 
-        # Simple heuristic: "extract X names" -> NER
-        if re.search(r"extract [a-z\s]+names", desc):
+        # "extract/identify/find/tag/annotate X names" -> NER
+        if re.search(r"(extract|identify|find|tag|annotate|recognize|detect) [a-z\s]+names", desc):
             parsed.ner = True
 
         # Classification
@@ -224,6 +236,8 @@ class DataGenerator:
                 "classification",
                 "sentiment",
                 "label as",
+                "categorize",
+                "categorise",
             ]
         ):
             parsed.classification = True
@@ -791,30 +805,34 @@ class DataGenerator:
         return f"{subject} {outcome}."
 
     def _build_generic_classification_text(self, task_name: str, true_label: str) -> str:
-        """Generic but varied text for non-sentiment classification tasks."""
-        contexts = [
-            "In this scenario, the example should be labeled as",
-            "For the following case, assign the label",
-            "Treat this short description as belonging to category",
-            "For the configured task, the correct label is",
-            "When training the model, mark this example with",
-        ]
-        domains = [
-            "a support ticket",
-            "a user question",
-            "a log line from a backend service",
-            "a short product description",
-            "an internal status update",
-            "a short customer email",
-            "a bug report summary",
-        ]
+        """Realistic domain text for non-sentiment classification tasks.
 
-        context = self._rng.choice(contexts)
-        domain = self._rng.choice(domains)
-        return (
-            f"{context} '{true_label}' for the {task_name} task. "
-            f"The text describes {domain} in a realistic setting."
-        )
+        Draws from a pool of varied short documents so the model sees realistic
+        inputs rather than meta-commentary that states the label explicitly.
+        """
+        texts = [
+            "The latest software update introduced a new dashboard with improved navigation and real-time analytics.",
+            "After weeks of testing, the integration was deployed to production without major incidents.",
+            "Customer feedback indicated a strong preference for the simplified checkout flow.",
+            "The quarterly review highlighted bottlenecks in the data pipeline that need addressing.",
+            "A new API endpoint was added to support bulk data exports from the platform.",
+            "The support queue grew significantly following the announcement of the new pricing tiers.",
+            "Our internal metrics show a 12% improvement in response time after the cache layer was added.",
+            "The onboarding documentation was updated to reflect the latest changes to the admin panel.",
+            "Several edge cases in the authentication flow were identified during the security audit.",
+            "The marketing campaign generated a high volume of sign-ups over the weekend.",
+            "Performance degraded noticeably under peak load conditions during the regional outage.",
+            "The new mobile release resolved a long-standing issue with offline sync.",
+            "Compliance requirements prompted a full review of how user data is stored and retained.",
+            "Team capacity is currently stretched due to the upcoming product launch deadline.",
+            "The infrastructure team proposed migrating to a managed Kubernetes service next quarter.",
+            "Users reported that the search feature consistently returns irrelevant results for long queries.",
+            "The billing system failed to apply the promotional discount during the campaign window.",
+            "A refactor of the notification module reduced average email delivery latency by 40%.",
+            "The access-control policy was tightened following a review of privilege escalation risks.",
+            "Stakeholders approved the roadmap for the next two quarters at the planning session.",
+        ]
+        return self._rng.choice(texts)
 
     # ------------------------------------------------------------------
     # Relation extraction example generation
