@@ -1,60 +1,86 @@
-## GLiNER2 Synthetic Data Generator (Technical Assessment)
+## GLiNER2 Synthetic Data Generator
 
-This folder contains a self-contained submission for the **Research Engineer technical assessment**. It implements a small Python module that synthetically generates GLiNER2-compatible training data, plus a demo notebook and design write-up.
+This repository is a submission for the **Research Engineer technical assessment**. It implements a Python module that synthetically generates GLiNER2-compatible training data, fine-tunes the base model on the generated data, and evaluates both the base and fine-tuned models on a held-out set.
 
 ### Contents
 
-- `generate.py` – Implements the `DataGenerator` class:
+- `generate.py` — The `DataGenerator` class:
   - `generate(task_description: str, n: int) -> list[dict]`
-  - Infers which GLiNER2 task types are required (`ner`, `classification`, `relation_extraction`, `json_extraction`) using either rule-based heuristics or an optional LLM-backed mode.
-  - Returns GLiNER2-style examples of the form: `{"input": "<text>", "output": {...}}`.
-- `notebook.ipynb` – Demonstration notebook:
-  - Shows examples for each single task type.
-  - Shows multi-task examples where outputs are composed into one `output` dict.
-  - Includes a scaffold for fine-tuning `fastino/gliner2-base-v1` on a synthetic sentiment task and evaluating it.
-- `design.md` – 500+ word design reasoning: task inference, multi-task composition, diversity, label balance, and limitations.
-- `requirements.txt` – Minimal dependencies for running the notebook and (optionally) GLiNER2 training.
+  - Infers which GLiNER2 task types are required (`ner`, `classification`, `relation_extraction`, `json_extraction`) from a natural language description using either rule-based heuristics (default) or an optional LLM-backed mode.
+  - Returns GLiNER2-style examples: `{"input": "<text>", "output": {...}}`.
+- `notebook.ipynb` — Demonstration and fine-tuning notebook:
+  - Single-task examples for all four GLiNER2 task types.
+  - Multi-task examples where outputs from multiple types are merged into one `output` dict.
+  - Fine-tuning of `fastino/gliner2-base-v1` on a balanced, deduplicated synthetic sentiment dataset.
+  - Evaluation of both the base and fine-tuned models on an independently generated held-out set.
+- `design.md` — Design write-up covering task inference, multi-task composition, diversity, label balance, architecture trade-offs, and limitations.
+- `requirements.txt` — Runtime dependencies.
 
 ### Usage
 
-1. **Install dependencies** (inside an existing virtualenv):
+**Install dependencies** (inside an existing virtualenv):
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. **Generate synthetic examples in Python**:
+**Generate synthetic examples:**
 
 ```python
 from generate import DataGenerator
 
-gen = DataGenerator(seed=42)  # or DataGenerator(seed=42, task_inference_mode="llm")
+gen = DataGenerator(seed=42)
 examples = gen.generate(
-    \"Extract company names and classify sentiment into positive, negative and neutral.\",
+    "Extract company names and classify sentiment into positive, negative and neutral.",
     n=10,
 )
 
-print(examples[0][\"input\"])
-print(examples[0][\"output\"])
+print(examples[0]["input"])
+print(examples[0]["output"])
 ```
 
-3. **Run the notebook**:
-
-From the project root (or this folder), start Jupyter and open `notebook.ipynb`:
+**Run the notebook:**
 
 ```bash
-jupyter notebook research_engineer_submission/notebook.ipynb
+jupyter notebook notebook.ipynb
 ```
 
-The last section of the notebook shows how to fine-tune and evaluate `fastino/gliner2-base-v1` using the generated JSONL files.
+### LLM opt-in modes
 
-### Notes on LLM usage
+The core module is rule-based by default and requires no external model. Two optional LLM-backed modes are available via a local [Ollama](https://ollama.com/) instance running `llama3.2`:
 
-The core generator in `generate.py` is rule-based by default and does **not** require an external LLM. However, you can opt into an LLM-backed task inference mode by constructing the generator with:
+**LLM task inference** — delegates the task-type decision (which of `ner`, `classification`, `relation_extraction`, `json_extraction` are active, and what labels to use) to the LLM while keeping template-based example generation:
 
 ```python
 gen = DataGenerator(task_inference_mode="llm")
 ```
 
-In this mode, task inference is delegated to a local **Ollama** instance running the `llama3.2` model via its HTTP API, while the rest of the pipeline (example generation and JSON schema) remains unchanged. If the Ollama server is unavailable or returns invalid JSON, the generator automatically falls back to the built-in heuristic inference.
+**LLM example generation** — delegates full example construction (input text + structured output) to the LLM while keeping rule-based task inference:
 
+```python
+gen = DataGenerator(example_generation_mode="llm")
+```
+
+Both modes can be combined. In either case, any failure (Ollama unavailable, invalid JSON, timeout) falls back automatically to the rule-based path, so the generator always produces output.
+
+The Ollama host is read from the `OLLAMA_HOST` environment variable (e.g. `172.21.112.1:11434` or `http://localhost:11434`). Unset defaults to `http://localhost:11434`.
+
+### Fine-tuning and evaluation
+
+The notebook's fine-tuning section:
+
+1. Generates **80 training examples** and **20 evaluation examples** independently (different random seeds), with no example overlap between the two sets.
+2. Uses `generate_balanced_unique` — a helper that fills per-label quotas and deduplicates by content fingerprint — to guarantee strict label balance (27/27/26 for the 3-label sentiment task on 80 examples, 7/7/6 on 20).
+3. Fine-tunes `fastino/gliner2-base-v1` for 3 epochs on the training set (~60 s on CPU).
+4. Evaluates both the **base model** and the **fine-tuned model** on the held-out set, reporting overall accuracy, per-label accuracy, and entity-level span P/R/F1 when applicable.
+
+**Results on the held-out sentiment set (20 examples):**
+
+| Model | Accuracy |
+|---|---|
+| Base (`fastino/gliner2-base-v1`) | 90.00% |
+| Fine-tuned | 100.00% |
+
+Per-label: the base model scored 100% on positive and negative but 66.67% on neutral. Fine-tuning on the balanced synthetic data brought all three labels to 100%.
+
+To generate a larger training set, change `TRAIN_N` and `EVAL_N` at the top of the data-generation cell. The sentiment template pool supports up to 192 unique examples (8 subjects × 8 outcomes × 3 labels); beyond that, switch to `example_generation_mode="llm"` for unlimited variety.
