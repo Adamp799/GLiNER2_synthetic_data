@@ -36,9 +36,13 @@ class ParsedTask:
 
     classification_task_name: str | None = None
     classification_labels: List[str] | None = None
+    # Optional hint about which entity labels the user cares about for NER,
+    # inferred from the natural language description (e.g. ["company"]).
+    ner_entity_labels: List[str] | None = None
 
 
 TaskInferenceMode = Literal["rules", "llm"]
+ExampleGenerationMode = Literal["templates", "llm"]
 
 
 class DataGenerator:
@@ -60,11 +64,13 @@ class DataGenerator:
         self,
         seed: int | None = None,
         task_inference_mode: TaskInferenceMode = "rules",
+        example_generation_mode: ExampleGenerationMode = "templates",
         llm_model: str = "llama3.2",
         llm_endpoint: str | None = None,
     ) -> None:
         self._rng = random.Random(seed)
         self._task_inference_mode: TaskInferenceMode = task_inference_mode
+        self._example_generation_mode: ExampleGenerationMode = example_generation_mode
         self._llm_model = llm_model
         # Resolve the Ollama chat endpoint, preferring OLLAMA_HOST when set.
         if llm_endpoint is None:
@@ -107,11 +113,27 @@ class DataGenerator:
 
         examples: List[Example] = []
         for idx in range(n):
+            # Optional: delegate full example construction to an LLM. If anything
+            # goes wrong (network issues, bad JSON, etc.), we silently fall back
+            # to the template-based generators below for this example.
+            if self._example_generation_mode == "llm":
+                llm_example = self._generate_example_via_llm(
+                    parsed=parsed,
+                    description=task_description,
+                    idx=idx,
+                    total=n,
+                )
+                if llm_example is not None:
+                    examples.append(llm_example)
+                    continue
+
             text_pieces: List[str] = []
             output: OutputDict = {}
 
             if parsed.ner:
-                ner_text, entities = self._generate_ner_example(idx)
+                ner_text, entities = self._generate_ner_example(
+                    idx, entity_labels=parsed.ner_entity_labels
+                )
                 text_pieces.append(ner_text)
                 output["entities"] = entities
 
@@ -164,10 +186,12 @@ class DataGenerator:
         if self._task_inference_mode == "llm":
             llm_parsed = self._infer_tasks_via_llm(description)
             if llm_parsed is not None:
-                return llm_parsed
+                return self._enrich_ner_entity_labels(llm_parsed, description)
 
         # Default: rules (also used as a robust fallback).
-        return self._infer_tasks_rules(description)
+        return self._enrich_ner_entity_labels(
+            self._infer_tasks_rules(description), description
+        )
 
     def _infer_tasks_rules(self, description: str) -> ParsedTask:
         desc = description.lower()
@@ -266,6 +290,73 @@ class DataGenerator:
             if parsed.classification_labels is None:
                 parsed.classification_labels = ["class_a", "class_b", "class_c"]
 
+        return parsed
+
+    @staticmethod
+    def _enrich_ner_entity_labels(parsed: ParsedTask, description: str) -> ParsedTask:
+        """Populate ner_entity_labels based on the natural language description.
+
+        This runs independently of how the main task flags were inferred (rules
+        vs LLM) so that both paths benefit from the same lightweight hints.
+        """
+        if not parsed.ner:
+            return parsed
+
+        desc = description.lower()
+        labels: List[str] = []
+
+        # Company / organization-like entities
+        if any(
+            kw in desc
+            for kw in [
+                "company",
+                "companies",
+                "organization",
+                "organisations",
+                "organizations",
+                "org name",
+                "business name",
+                "startup",
+                "brands",
+                "brand name",
+            ]
+        ):
+            labels.append("company")
+
+        # Person entities
+        if any(
+            kw in desc
+            for kw in [
+                "person",
+                "people",
+                "individual",
+                "individuals",
+                "employee names",
+                "founder names",
+                "ceo names",
+            ]
+        ):
+            labels.append("person")
+
+        # Location entities
+        if any(
+            kw in desc
+            for kw in [
+                "location",
+                "locations",
+                "city",
+                "cities",
+                "country",
+                "countries",
+                "place",
+                "places",
+            ]
+        ):
+            labels.append("location")
+
+        # Only set when we have an explicit hint; keep the generic NER
+        # behaviour otherwise.
+        parsed.ner_entity_labels = labels or None
         return parsed
 
     def _infer_tasks_via_llm(self, description: str) -> Optional[ParsedTask]:
@@ -393,7 +484,9 @@ class DataGenerator:
     # ------------------------------------------------------------------
     # NER example generation
     # ------------------------------------------------------------------
-    def _generate_ner_example(self, idx: int) -> tuple[str, Dict[str, List[str]]]:
+    def _generate_ner_example(
+        self, idx: int, entity_labels: Optional[List[str]] = None
+    ) -> tuple[str, Dict[str, List[str]]]:
         people = [
             "Alice Johnson",
             "Bob Smith",
@@ -435,6 +528,26 @@ class DataGenerator:
         company = self._rng.choice(companies)
         location = self._rng.choice(locations)
 
+        # Normalise requested labels, if any.
+        requested = list(dict.fromkeys((entity_labels or [])))  # stable unique
+
+        # Special-case: company-only extraction. Use sentences focused purely
+        # on companies so the supervision aligns tightly with the requested
+        # entity type.
+        if requested and set(requested) == {"company"}:
+            templates = [
+                f"{company} reported record quarterly revenue this year.",
+                f"After a successful funding round, {company} expanded its engineering team.",
+                f"Analysts predict that {company} will outpace its competitors in the next quarter.",
+                f"{company} is rolling out a new AI-powered analytics platform.",
+                f"Shares of {company} rose sharply following the product launch.",
+            ]
+            text = self._rng.choice(templates)
+            entities = {"company": [company]}
+            return text, entities
+
+        # Otherwise, fall back to the generic multi-entity templates but filter
+        # the output entities to the requested subset if one was provided.
         templates = [
             f"{person} works as a data scientist at {company} in {location}.",
             f"{company}, based in {location}, recently hired {person} to lead a new project.",
@@ -445,12 +558,150 @@ class DataGenerator:
         ]
         text = self._rng.choice(templates)
 
-        entities = {
+        all_entities: Dict[str, List[str]] = {
             "person": [person],
             "company": [company],
             "location": [location],
         }
+
+        if requested:
+            entities = {k: v for k, v in all_entities.items() if k in requested}
+        else:
+            entities = all_entities
+
         return text, entities
+
+    # ------------------------------------------------------------------
+    # LLM-based full example generation
+    # ------------------------------------------------------------------
+    def _generate_example_via_llm(
+        self, parsed: ParsedTask, description: str, idx: int, total: int
+    ) -> Optional[Example]:
+        """Delegate construction of a single example to the local LLM.
+
+        This is best-effort: any failure to contact the model or parse its
+        response results in `None`, signalling the caller to fall back to the
+        template-based generators.
+        """
+        # Maintain classification label balance by choosing the true label
+        # deterministically, and pass this to the LLM as a hard requirement.
+        labels = parsed.classification_labels or ["class_a", "class_b", "class_c"]
+        true_label = labels[idx % len(labels)] if parsed.classification else None
+
+        task_config = {
+            "ner": parsed.ner,
+            "ner_entity_labels": parsed.ner_entity_labels,
+            "classification": parsed.classification,
+            "classification_task_name": parsed.classification_task_name,
+            "classification_labels": labels if parsed.classification else None,
+            "classification_true_label": true_label,
+            "relation_extraction": parsed.relation_extraction,
+            "json_extraction": parsed.json_extraction,
+        }
+
+        prompt = (
+            "You generate GLiNER2-compatible synthetic training examples.\n\n"
+            "GLiNER2 expects each example to be a JSON object with:\n"
+            '{\n'
+            '  "input": "<text>",\n'
+            '  "output": {\n'
+            '    "entities": {"label": ["span", ...]},\n'
+            '    "classifications": [\n'
+            '      {\n'
+            '        "task": "task name",\n'
+            '        "labels": ["label1", ...],\n'
+            '        "true_label": ["label1"]\n'
+            "      }\n"
+            "    ],\n"
+            '    "relations": [\n'
+            '      {"relation_name": {"head": "span", "tail": "span"}}\n'
+            "    ],\n"
+            '    "json_structures": [ { ... } ]\n'
+            "  }\n"
+            "}\n\n"
+            "You will be given (1) the user's natural language task description "
+            "and (2) a parsed task configuration. Use them to generate ONE "
+            "realistic training example. Follow these rules strictly:\n"
+            "- If ner=false, do not include an 'entities' field.\n"
+            "- If ner=true and ner_entity_labels is provided, only include those "
+            "labels in 'entities'.\n"
+            "- If classification=false, do not include 'classifications'.\n"
+            "- If classification=true, you MUST use the provided "
+            "'classification_task_name', 'classification_labels', and set "
+            "'true_label' to exactly the provided classification_true_label.\n"
+            "- If relation_extraction=false, omit 'relations'.\n"
+            "- If json_extraction=false, omit 'json_structures'.\n"
+            "- The 'input' text must be consistent with the structured output.\n\n"
+            "Return ONLY the JSON object, with no extra commentary.\n\n"
+            "User task description:\n"
+            f"{description}\n\n"
+            "Parsed task configuration (JSON):\n"
+            f"{json.dumps(task_config, ensure_ascii=False)}\n"
+        )
+
+        payload = {
+            "model": self._llm_model,
+            "messages": [
+                {"role": "system", "content": "You respond with JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+        }
+
+        body = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self._llm_endpoint,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                raw = response.read().decode("utf-8")
+        except (urllib.error.URLError, TimeoutError):
+            return None
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
+        message = data.get("message") or {}
+        content = message.get("content")
+        if not isinstance(content, str):
+            return None
+
+        try:
+            parsed_json = json.loads(content)
+        except json.JSONDecodeError:
+            return None
+
+        # Basic structural validation.
+        if not isinstance(parsed_json, dict):
+            return None
+
+        input_text = parsed_json.get("input")
+        output = parsed_json.get("output")
+        if not isinstance(input_text, str) or not isinstance(output, dict):
+            return None
+
+        # Optionally, enforce the chosen true_label if classification is active.
+        if parsed.classification and true_label is not None:
+            classifications = output.get("classifications")
+            if isinstance(classifications, list) and classifications:
+                first = classifications[0]
+                if isinstance(first, dict):
+                    first["task"] = parsed.classification_task_name or "classification"
+                    first["labels"] = labels
+                    first["true_label"] = [true_label]
+                    output["classifications"] = [first]
+
+        example: Example = {
+            "input": input_text,
+            "output": output,
+        }
+        return example
 
     # ------------------------------------------------------------------
     # Classification example generation
