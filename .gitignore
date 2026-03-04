@@ -1,32 +1,10 @@
-# Keys and secrets
+# Secrets
 .env
 .env.*
 !.env.example
-*.key
-*.pem
-secrets/
-secrets.*
-*_secret*
-*_secrets*
-api_key*
-*.credentials
-.env.local
-.env.*.local
 
 # Jupyter
 .ipynb_checkpoints/
-*/.ipynb_checkpoints/
-# Optional: uncomment to ignore notebook outputs (or use nbstripout before commit)
-# *.ipynb
-
-# Common results/output dirs (if notebooks write here)
-results/
-output/
-outputs/
-output_gliner2_sentiment/
-*.pkl
-*.pickle
-*.joblib
 
 # Python
 __pycache__/
@@ -41,6 +19,15 @@ env/
 .eggs/
 dist/
 build/
+
+# Outputs (notebook / generation)
+output_gliner2_sentiment/
+results/
+output/
+outputs/
+*.pkl
+*.pickle
+*.joblib
 
 # IDE / OS
 .idea/

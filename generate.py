@@ -339,11 +339,11 @@ class DataGenerator:
         location = self._rng.choice(self._LOCATIONS)
 
         # Deduplicate while preserving order.
-        requested = list(dict.fromkeys(entity_labels or []))
+        requested = list[str](dict.fromkeys(entity_labels or []))
 
         # For single-entity-type requests use focused templates so the text does
         # not mention unannotated entities from the other categories.
-        if requested and set(requested) == {"company"}:
+        if requested and set[str](requested) == {"company"}:
             templates = [
                 f"{company} reported record quarterly revenue this year.",
                 f"After a successful funding round, {company} expanded its engineering team.",
@@ -353,7 +353,7 @@ class DataGenerator:
             ]
             return self._rng.choice(templates), {"company": [company]}
 
-        if requested and set(requested) == {"person"}:
+        if requested and set[str](requested) == {"person"}:
             templates = [
                 f"{person} presented findings at an industry conference this week.",
                 f"The board announced that {person} would be joining as the new VP of Engineering.",
@@ -363,7 +363,7 @@ class DataGenerator:
             ]
             return self._rng.choice(templates), {"person": [person]}
 
-        if requested and set(requested) == {"location"}:
+        if requested and set[str](requested) == {"location"}:
             templates = [
                 f"The new regional office will be established in {location} by next year.",
                 f"Our operations team confirmed the deployment was rolled out from {location}.",
@@ -373,7 +373,7 @@ class DataGenerator:
             ]
             return self._rng.choice(templates), {"location": [location]}
 
-        if requested and set(requested) == {"person", "company"}:
+        if requested and set[str](requested) == {"person", "company"}:
             templates = [
                 f"{person} was appointed VP of Engineering at {company} last quarter.",
                 f"{company} announced that {person} would lead its new research division.",
@@ -383,7 +383,7 @@ class DataGenerator:
             ]
             return self._rng.choice(templates), {"person": [person], "company": [company]}
 
-        if requested and set(requested) == {"person", "location"}:
+        if requested and set[str](requested) == {"person", "location"}:
             templates = [
                 f"{person} has relocated to {location} to head up a regional initiative.",
                 f"Based in {location}, {person} leads a distributed engineering team.",
@@ -393,7 +393,7 @@ class DataGenerator:
             ]
             return self._rng.choice(templates), {"person": [person], "location": [location]}
 
-        if requested and set(requested) == {"company", "location"}:
+        if requested and set[str](requested) == {"company", "location"}:
             templates = [
                 f"{company} announced the opening of a new office in {location}.",
                 f"The {location} branch of {company} has doubled in size over the past year.",
@@ -403,6 +403,7 @@ class DataGenerator:
             ]
             return self._rng.choice(templates), {"company": [company], "location": [location]}
 
+        # Default to all three entity type templates.
         templates = [
             f"{person} works as a data scientist at {company} in {location}.",
             f"{company}, based in {location}, recently hired {person} to lead a new project.",
@@ -419,6 +420,7 @@ class DataGenerator:
 
     def _generate_classification_example(self, idx: int) -> tuple[str, list[dict]]:
         labels = ["positive", "negative", "neutral"]
+        # The true label is chosen deterministically to maintain balance across the batch.
         true_label = labels[idx % len(labels)]
         subject = self._rng.choice(self._SENTIMENT_SUBJECTS)
         outcome = self._rng.choice(self._SENTIMENT_OUTCOMES[true_label])
@@ -451,10 +453,9 @@ class DataGenerator:
         self, parsed: ParsedTask, description: str, idx: int
     ) -> Example | None:
         """Delegate construction of a single example to the local LLM.
-
         The true_label for classification is chosen deterministically to maintain
-        balance across the batch. Returns None on any failure.
-        """
+        balance across the batch. Returns None on any failure."""
+
         labels = parsed.classification_labels or ["class_a", "class_b", "class_c"]
         true_label = labels[idx % len(labels)] if parsed.classification else None
 
@@ -482,6 +483,7 @@ class DataGenerator:
                 '"json_structures": [{"<schema_name>": {"<field>": "<value from input>"}}]'
             )
 
+        # Add constraints for each active task type.
         constraints: list[str] = [
             '- Return exactly one JSON object with keys "input" and "output".',
             "- Omit output keys for inactive tasks.",
@@ -495,12 +497,13 @@ class DataGenerator:
             constraints.append(
                 f'- true_label must be exactly ["{true_label}"] — do not change it.'
             )
-            constraints.append(f"- labels must be exactly {json.dumps(labels)}.")
+            constraints.append(f"- classification labels must be exactly {json.dumps(labels)}.")
         if parsed.relation_extraction:
             constraints.append(
                 '- Each relation entry must have the form {"<relation_name>": {"head": "<str>", "tail": "<str>"}}.'
             )
 
+        # Generate the promp from the task description, output schema, and constraints.
         prompt = (
             f"Task: {description}\n\n"
             "Generate one GLiNER2 training example matching this exact output structure:\n"
@@ -516,11 +519,9 @@ class DataGenerator:
              {"role": "user", "content": prompt}],
             timeout=60,
         )
-        if content is None:
-            return None
+        if content is None: return None # LLM call failed.
         result = self._parse_json_response(content)
-        if result is None:
-            return None
+        if result is None: return None # JSON parsing failed.
 
         input_text = result.get("input")
         output = result.get("output")
@@ -571,4 +572,5 @@ class DataGenerator:
             if not isinstance(js, list) or not all(isinstance(x, dict) for x in js):
                 output["json_structures"] = []
 
+        # Return the example as a dict with input and output fields.
         return {"input": input_text, "output": output}
