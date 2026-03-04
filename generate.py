@@ -33,12 +33,6 @@ TaskInferenceMode = Literal["rules", "llm"]
 ExampleGenerationMode = Literal["templates", "llm"]
 
 class DataGenerator:
-    """Generate GLiNER2-compatible synthetic training examples from a task description.
-    Task types are inferred automatically; outputs for multiple active types are
-    merged into a single example dict. Inference and generation both default to
-    lightweight rules/templates; both can be upgraded to a local Ollama LLM
-    with automatic fallback to the rule-based path on any failure."""
-
     # Template banks used by the sub-generators.
     _PEOPLE = [
         "Alice Johnson", "Bob Smith", "Carlos Diaz", "Diana Lee", "Emily Chen",
@@ -129,17 +123,19 @@ class DataGenerator:
     # ------------------------------------------------------------------ #
 
     def generate(self, task_description: str, n: int) -> list[Example]:
-        """Generate n GLiNER2-compatible training examples from a task description.
-        Task types are inferred automatically; when multiple are active their
-        output fields are merged into a single output dict per example.
-        """
+        """Generate GLiNER2-compatible synthetic training examples from a task description.
+        Task types are inferred automatically; outputs for multiple active types are
+        merged into a single example dict. Inference and generation both default to
+        lightweight rules/templates; both can be upgraded to a local Ollama LLM
+        with automatic fallback to the rule-based path on any failure."""
+
         if n <= 0: return []
-        parsed = self._infer_tasks(task_description)
+        parsed = self._infer_tasks_via_llm(task_description) if self._task_inference_mode == "llm" else None
+        if parsed is None:
+            parsed = self._infer_tasks_rules(task_description)
         examples: list[Example] = []
 
         for idx in range(n):
-            # In LLM generation mode, delegate to the model and fall through to
-            # the template path only if the call fails.
             if self._example_generation_mode == "llm":
                 llm_example = self._generate_example_via_llm(parsed, task_description, idx)
                 if llm_example is not None:
@@ -148,7 +144,7 @@ class DataGenerator:
 
             text_pieces: list[str] = []
             output: OutputDict = {}
-
+        
             if parsed.ner:
                 text, entities = self._generate_ner_example(parsed.ner_entity_labels)
                 text_pieces.append(text)
@@ -181,45 +177,44 @@ class DataGenerator:
     # Task inference                                                       #
     # ------------------------------------------------------------------ #
 
-    def _infer_tasks(self, description: str) -> ParsedTask:
-        """Dispatch to LLM or rule-based inference."""
-        if self._task_inference_mode == "llm":
-            result = self._infer_tasks_via_llm(description)
-            if result is not None:
-                return result
-        return self._infer_tasks_rules(description)
-
     def _infer_tasks_rules(self, description: str) -> ParsedTask:
-        """Rule-based inference. Template generation supports only:
+        """Rules-based inference. Template generation supports only:
         - NER: company, person, location entities
         - Classification: sentiment (positive / negative / neutral)
         - Relation extraction: works_for, lives_in
         - JSON extraction: product schema (name, storage, price)
-        Use LLM mode for anything outside these constraints.
-        """
+        Use LLM mode for anything outside these constraints."""
+    
         desc = description.lower()
         parsed = ParsedTask()
 
-        # NER — detect which of the three supported entity types are requested.
-        # If none are explicitly mentioned but a generic NER keyword is present,
-        # default to all three. Use LLM mode to extract other entity types.
+        # NER — entity type words must appear in an extraction context (alongside
+        # "name(s)" or a generic NER keyword) to avoid false-positives when those
+        # words appear incidentally, e.g. "relations between people and companies".
+        # The template mode supports only company, person, and location entities.
+        ner_generic = bool(re.search(
+            r"\bner\b|\bnamed[\s-]entit(?:y|ies)\b|\bannotate\b|\bhighlight\b|\btag(?:s|ging)?\b",
+            desc,
+        ))
+        ner_context = ner_generic or bool(re.search(r"\bnames?\b", desc))
         ner_labels: list[str] = []
-        if re.search(
-            r"\bcompan(?:y|ies)\b|\borgani[sz]ations?\b"
-            r"|\borg\s+name\b|\bbusiness\s+name\b|\bstartup\b|\bbrands?\b",
-            desc,
-        ):
-            ner_labels.append("company")
-        if re.search(
-            r"\bpe(?:rson|ople)\b|\bindividuals?\b|\b(?:employee|founder|ceo)\s+names?\b",
-            desc,
-        ):
-            ner_labels.append("person")
-        if re.search(r"\blocations?\b|\bcit(?:y|ies)\b|\bcountr(?:y|ies)\b|\bplaces?\b", desc):
-            ner_labels.append("location")
-        if ner_labels or re.search(r"\b(ner|named[\s-]entity|annotate|highlight)\b", desc):
+        if ner_context:
+            if re.search(
+                r"\bcompan(?:y|ies)\b|\borgani[sz]ations?\b"
+                r"|\borg\s+name\b|\bbusiness\s+name\b|\bstartup\b|\bbrands?\b",
+                desc,
+            ):
+                ner_labels.append("company")
+            if re.search(
+                r"\bpe(?:rson|ople)\b|\bindividuals?\b|\b(?:employee|founder|ceo)\s+names?\b",
+                desc,
+            ):
+                ner_labels.append("person")
+            if re.search(r"\blocations?\b|\bcit(?:y|ies)\b|\bcountr(?:y|ies)\b|\bplaces?\b", desc):
+                ner_labels.append("location")
+        if ner_labels or ner_generic:
             parsed.ner = True
-            parsed.ner_entity_labels = ner_labels or None  # None → all three
+            parsed.ner_entity_labels = ner_labels or None  # None → all three entity types
 
         # Classification — template mode supports sentiment only.
         if bool(re.search(r"\bsentiment\b", desc)) or (
@@ -231,13 +226,12 @@ class DataGenerator:
             parsed.classification_labels = ["positive", "negative", "neutral"]
 
         # Relation extraction — template mode supports works_for and lives_in only.
-        if re.search(r"\brelation\w*\b|\bworks\s+for\b|\blives\s+in\b|\bborn\s+in\b", desc):
+        if re.search(r"\brelations?\b|\brelationship\w*\b|\bworks\s+for\b|\blives\s+in\b|\bborn\s+in\b", desc):
             parsed.relation_extraction = True
 
         # JSON extraction — template mode supports the product schema only.
-        if re.search(r"\bjson\b|\bstructured\b|\bkey[-\s]value\b|\bfields\b|\bschema\b|\bextract\s+as\b", desc):
+        if re.search(r"\bjson\b|\bkey[-\s]value\b|\bschema\b|\bextract\s+as\b", desc):
             parsed.json_extraction = True
-
         return parsed
 
     def _infer_tasks_via_llm(self, description: str) -> ParsedTask | None:
@@ -254,7 +248,7 @@ class DataGenerator:
             '  "relation_extraction": true if relation extraction is needed\n'
             '  "json_extraction": true if structured JSON field extraction is needed\n\n'
             "Example:\n"
-            'Description: "Extract company and person names; classify sentiment as positive, negative, or neutral."\n'
+            'Description: "Extract company and person names, and classify sentiment as positive, negative, or neutral."\n'
             'Response: {"ner": true, "ner_entity_labels": ["company", "person"], "classification": true, '
             '"classification_task_name": "sentiment", "classification_labels": ["positive", "negative", "neutral"], '
             '"relation_extraction": false, "json_extraction": false}\n\n'
@@ -266,8 +260,7 @@ class DataGenerator:
              {"role": "user", "content": prompt}],
             timeout=30,
         )
-        if content is None:
-            return None
+        if content is None: return None
         data = self._parse_json_response(content)
         return self._parsed_task_from_dict(data) if data is not None else None
 
@@ -298,6 +291,7 @@ class DataGenerator:
         except TypeError:
             return None
 
+        # Data validation and sanitization.
         if not isinstance(parsed.classification_task_name, str):
             parsed.classification_task_name = None
         labels = parsed.classification_labels
@@ -309,20 +303,15 @@ class DataGenerator:
             [str(l).strip() for l in ner_labels if isinstance(l, str) and l.strip()] or None
         ) if isinstance(ner_labels, list) else None
 
-        if not parsed.ner:
-            parsed.ner_entity_labels = None
         if parsed.classification:
             parsed.classification_task_name = parsed.classification_task_name or "classification"
             parsed.classification_labels = parsed.classification_labels or ["class_a", "class_b", "class_c"]
-
         return parsed
-
 
     def _call_llm(self, messages: list[dict], timeout: int = 30) -> str | None:
         """POST to the Ollama /api/chat endpoint and return the assistant content string.
+        Returns None on any network error, timeout, or malformed response."""
 
-        Returns None on any network error, timeout, or malformed response.
-        """
         body = json.dumps({"model": self._llm_model, "messages": messages, "stream": False}).encode()
         req = urllib.request.Request(
             self._llm_endpoint,
