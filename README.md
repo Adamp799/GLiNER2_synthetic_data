@@ -14,6 +14,7 @@ This repository is a submission for the **Research Engineer technical assessment
   - Fine-tuning of `fastino/gliner2-base-v1` on a balanced, deduplicated synthetic sentiment dataset.
   - Evaluation of both the base and fine-tuned models on an independently generated held-out set.
 - `design.md` — Design write-up covering task inference, multi-task composition, diversity, label balance, architecture trade-offs, and limitations.
+- `research_engineer.md` — Technical assessment specification.
 - `requirements.txt` — Runtime dependencies.
 
 ### Usage
@@ -63,24 +64,17 @@ gen = DataGenerator(example_generation_mode="llm")
 
 Both modes can be combined. In either case, any failure (Ollama unavailable, invalid JSON, timeout) falls back automatically to the rule-based path, so the generator always produces output.
 
-The Ollama host is read from the `OLLAMA_HOST` environment variable (e.g. `172.21.112.1:11434` or `http://localhost:11434`). Unset defaults to `http://localhost:11434`.
+**Note:** in template mode, classification is only supported for sentiment tasks (labels `positive`, `negative`, `neutral`). Non-sentiment classification requires `example_generation_mode="llm"`, since template-generated texts cannot be meaningfully tied to arbitrary label sets.
+
+The Ollama host is read from the `OLLAMA_HOST` environment variable (e.g. `172.21.112.1:11434`). Unset defaults to `http://localhost:11434`.
 
 ### Fine-tuning and evaluation
 
 The notebook's fine-tuning section:
 
-1. Generates **80 training examples** and **20 evaluation examples** independently (different random seeds), with no example overlap between the two sets.
-2. Uses `generate_balanced_unique` — a helper that fills per-label quotas and deduplicates by content fingerprint — to guarantee strict label balance (27/27/26 for the 3-label sentiment task on 80 examples, 7/7/6 on 20).
-3. Fine-tunes `fastino/gliner2-base-v1` for 3 epochs on the training set (~60 s on CPU).
+1. Generates **150 training examples** and **30 evaluation examples** independently (different random seeds), with no example overlap between the two sets.
+2. Uses `generate_balanced_unique` — a helper that fills per-label quotas and deduplicates by content fingerprint — to guarantee strict label balance (50/50/50 for the 3-label sentiment task on 150 examples, 10/10/10 on 30).
+3. Fine-tunes `fastino/gliner2-base-v1` for 3 epochs on the training set.
 4. Evaluates both the **base model** and the **fine-tuned model** on the held-out set, reporting overall accuracy, per-label accuracy, and entity-level span P/R/F1 when applicable.
-
-**Results on the held-out sentiment set (20 examples):**
-
-| Model | Accuracy |
-|---|---|
-| Base (`fastino/gliner2-base-v1`) | 90.00% |
-| Fine-tuned | 100.00% |
-
-Per-label: the base model scored 100% on positive and negative but 66.67% on neutral. Fine-tuning on the balanced synthetic data brought all three labels to 100%.
 
 To generate a larger training set, change `TRAIN_N` and `EVAL_N` at the top of the data-generation cell. The sentiment template pool supports up to 192 unique examples (8 subjects × 8 outcomes × 3 labels); beyond that, switch to `example_generation_mode="llm"` for unlimited variety.
