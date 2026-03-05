@@ -62,7 +62,7 @@ gen = DataGenerator(task_inference_mode="llm")
 gen = DataGenerator(example_generation_mode="llm")
 ```
 
-Both modes can be combined. In either case, any failure (Ollama unavailable, invalid JSON, timeout) falls back automatically to the rule-based path, so the generator always produces output.
+Both modes can be combined. If **task inference** is LLM-backed and the LLM call fails (Ollama unavailable, invalid JSON, timeout), the generator falls back to rule-based inference. If **example generation** is LLM-backed and the LLM fails for a given example (unreachable, timeout, or invalid response), that example is generated via templates instead, so the generator always returns exactly `n` examples.
 
 **Note:** in template mode, classification is only supported for sentiment tasks (labels `positive`, `negative`, `neutral`). Non-sentiment classification requires `example_generation_mode="llm"`, since template-generated texts cannot be meaningfully tied to arbitrary label sets.
 

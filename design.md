@@ -6,7 +6,7 @@ The implementation is split into two layers. By default it uses lightweight keyw
 
 ## Task-type inference
 
-Task inference is handled by `_infer_tasks`, which dispatches to either `_infer_tasks_rules` or `_infer_tasks_via_llm`.
+Task inference is performed inside `generate()`: when `task_inference_mode="llm"` it calls `_infer_tasks_via_llm` first; if that returns `None` (Ollama unavailable, invalid JSON, or timeout), or when using the default rules mode, it uses `_infer_tasks_rules`.
 
 In **rule-based mode**, `_infer_tasks_rules` lowercases the description and applies per-task regex checks. Each task type is restricted to what the template generators actually support — anything outside these constraints requires LLM mode:
 
@@ -37,7 +37,7 @@ The approach of concatenating independent text fragments is deliberately simple:
 
 **Per-subset NER templates.** The NER sub-generator selects a template bank based on exactly which entity types are requested, covering all seven non-empty subsets of {company, person, location}. Each template only mentions the entities in the requested subset, so the input text contains no unannotated entity spans from other categories.
 
-**`generate_balanced_unique`.** The notebook's fine-tuning section uses a helper function that enforces both structural uniqueness and strict per-label quotas. It fills separate per-label buckets by calling `DataGenerator.generate` in batches and routing each generated example to its label's bucket. The training and evaluation sets are generated independently (seeds 123 and 456 respectively). The `exclude_keys` parameter ensures that no example fingerprint (serialised JSON hash) can appear in both splits. A `max_attempts` guard raises `ValueError` if the template pool is exhausted before the quotas are met, preventing silent infinite loops. Round-robin interleaving at the end of the function produces the final sequence with the same cycling pattern as the idx-based label assignment in the generator.
+**`generate_balanced_unique`.** The notebook's fine-tuning section uses a helper that enforces both structural uniqueness (by example fingerprint) and strict per-label quotas. It fills per-label buckets by calling `DataGenerator.generate` in batches and routing each generated example to its label's bucket. The training and evaluation sets are generated independently (seeds 123 and 456). The `exclude_keys` parameter ensures no example fingerprint (serialised JSON) appears in both splits. `max_attempts` defaults to 192 (the size of the sentiment template pool) and raises `ValueError` if quotas are not met before then. Round-robin interleaving produces the final sequence with the same label-cycling pattern as the generator.
 
 The result for the default sentiment task (n=150 train, n=30 eval) is exact balance: 50/50/50 in the training set and 10/10/10 in the evaluation set, with zero cross-split overlap.
 
@@ -53,7 +53,7 @@ For multi-task composition we chose text concatenation over joint narrative gene
 
 The notebook evaluates both the base and fine-tuned GLiNER2 models on the held-out synthetic set using **classification accuracy**: the fraction of examples where the model's predicted label exactly matches the gold label. Per-label accuracy is reported alongside overall accuracy to expose class-specific weaknesses.
 
-**Setup:** 150 training examples (50/50/50 per label) and 30 held-out evaluation examples (10/10/10 per label), generated with different seeds and no cross-split overlap. Fine-tuned for 3 epochs with batch size 8 (56 steps total).
+**Setup:** 150 training examples (50/50/50 per label) and 30 held-out evaluation examples (10/10/10 per label), generated with different seeds and no cross-split overlap. Fine-tuned for 3 epochs with batch size 8 (~19 steps per epoch, 57 steps total).
 
 Results should be interpreted with caution: the evaluation set is synthetically generated from the same template pool as the training set. A model that has memorised the template structure rather than learned genuine sentiment will also score well. The results demonstrate that the fine-tuning pipeline runs correctly and that the generated data is internally consistent, but not that the fine-tuned model generalises to real-world sentiment text.
 

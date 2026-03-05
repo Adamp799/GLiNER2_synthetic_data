@@ -141,6 +141,7 @@ class DataGenerator:
                 if llm_example is not None:
                     examples.append(llm_example)
                     continue
+                # LLM unreachable or returned invalid output — fall back to templates for this example
 
             text_pieces: list[str] = []
             output: OutputDict = {}
