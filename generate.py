@@ -140,8 +140,6 @@ class DataGenerator:
 
         for idx in range(n):
             if self._example_generation_mode == "llm":
-                # Brief delay before 2nd+ example so Ollama can finish the previous request (reduces timeouts)
-                if idx > 0: time.sleep(1)
                 llm_example = self._generate_example_via_llm(parsed, task_description, idx)
                 # If we have an example but omitted entities we asked for, retry up to 2 more times.
                 if (llm_example is not None and parsed.ner and parsed.ner_entity_labels
@@ -168,11 +166,11 @@ class DataGenerator:
             _template_labels: list[str] | None = None
             if parsed.ner:
                 if not parsed.ner_entity_labels or _requested_lower <= _template_ner:
-                    _template_labels = parsed.ner_entity_labels
-                if _template_labels is not None:
+                    _template_labels = parsed.ner_entity_labels 
+                if _template_labels is not None: # Generate NER from templates.
                     text, entities = self._generate_ner_example(_template_labels)
                     text_pieces.append(text)
-                    output["entities"] = {k: [s.lower() for s in v] for k, v in entities.items()}
+                    output["entities"] = entities
                 else: output["entities"] = {}
 
             if parsed.classification:
@@ -199,7 +197,7 @@ class DataGenerator:
         return examples
 
     # ------------------------------------------------------------------ #
-    # Task inference                                                       #
+    # Task inference                                                     #
     # ------------------------------------------------------------------ #
 
     def _infer_tasks_rules(self, description: str) -> ParsedTask:
@@ -245,7 +243,7 @@ class DataGenerator:
             for w in from_name_phrase:
                 if w in _skip or w in _template_related: continue
                 ner_labels.append(w.lower())
-            ner_labels = list[str](dict.fromkeys(ner_labels))
+            ner_labels = list[str](dict.fromkeys(ner_labels)) # Remove duplicates.
         if ner_labels or ner_generic:
             parsed.ner = True
             parsed.ner_entity_labels = ner_labels or None  # None → all three entity types
@@ -364,7 +362,7 @@ class DataGenerator:
         return content if isinstance(content, str) else None
 
     # ------------------------------------------------------------------ #
-    # Example generation                                                   #
+    # Example generation                                                 #
     # ------------------------------------------------------------------ #
 
     def _generate_ner_example(
@@ -409,6 +407,7 @@ class DataGenerator:
             ]
             return self._rng.choice(templates), {"location": [location]}
 
+        # For two-entity-type requests also use focused templates.
         if requested and set[str](requested) == {"person", "company"}:
             templates = [
                 f"{person} was appointed VP of Engineering at {company} last quarter.",
@@ -527,12 +526,11 @@ class DataGenerator:
         ]
         if parsed.ner and parsed.ner_entity_labels:
             constraints.append(
-                f"- entities must use exactly these label keys (lowercase): {json.dumps(parsed.ner_entity_labels)}."
+                f"- entities must use exactly these label keys: {json.dumps(parsed.ner_entity_labels)}."
             )
-            constraints.append("- Use lowercase for all entity type keys and for all span text in the output.")
         if parsed.classification:
             constraints.append(
-                f'- true_label must be exactly ["{true_label}"] — do not change it.'
+                f'- true_label must be exactly ["{true_label}"] — do not change it. Generate the text to match the true_label.'
             )
             constraints.append(f"- classification labels must be exactly {json.dumps(labels)}.")
         if parsed.relation_extraction:
@@ -566,6 +564,10 @@ class DataGenerator:
         # Strip placeholder artifacts the LLM sometimes leaves (e.g. leading "<" from "<text>").
         input_text = input_text.strip().lstrip("<").rstrip(">").strip()
         if not input_text: return None
+
+    # ------------------------------------------------------------------ #
+    # Enforcement of LLM Generated Examples                              #
+    # ------------------------------------------------------------------ #
 
         # Enforce classification: we requested a specific true_label for balance; prompt asks LLM to generate matching text.
         if parsed.classification and true_label is not None:
