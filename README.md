@@ -1,6 +1,6 @@
 ## GLiNER2 Synthetic Data Generator
 
-This repository is a submission for the **Research Engineer technical assessment**. It implements a Python module that synthetically generates GLiNER2-compatible training data, fine-tunes the base model on the generated data, and evaluates both the base and fine-tuned models on a held-out set.
+This repository is a submission for the **Research Engineer technical assessment**. It implements a Python module that synthetically generates GLiNER2-compatible training data, and a notebook for fine-tuning GLiNER2 on the generated data, evaluating the base and fine-tuned models on a held-out set.
 
 ### Contents
 
@@ -11,9 +11,10 @@ This repository is a submission for the **Research Engineer technical assessment
 - `notebook.ipynb` — Demonstration and fine-tuning notebook:
   - Single-task examples for all four GLiNER2 task types.
   - Multi-task examples where outputs from multiple types are merged into one `output` dict.
+  - Demonstration of LLM-backed modes.
   - Fine-tuning of `fastino/gliner2-base-v1` on a balanced, deduplicated synthetic sentiment dataset.
   - Evaluation of both the base and fine-tuned models on an independently generated held-out set.
-- `design.md` — Design write-up covering task inference, multi-task composition, diversity, label balance, architecture trade-offs, and limitations.
+- `design.md` — Design write-up covering task inference, multi-task composition, example generation, label balance, architecture trade-offs, and limitations.
 - `research_engineer.md` — Technical assessment specification.
 - `requirements.txt` — Runtime dependencies.
 
@@ -40,15 +41,9 @@ print(examples[0]["input"])
 print(examples[0]["output"])
 ```
 
-**Run the notebook:**
-
-```bash
-jupyter notebook notebook.ipynb
-```
-
 ### LLM opt-in modes
 
-The core module is rule-based by default and requires no external model. Two optional LLM-backed modes are available via a local [Ollama](https://ollama.com/) instance running `llama3.2`:
+Two optional LLM-backed modes are available via a local [Ollama](https://ollama.com/) instance defaulting to `llama3.2`:
 
 **LLM task inference** — delegates the task-type decision (which of `ner`, `classification`, `relation_extraction`, `json_extraction` are active, and what labels to use) to the LLM while keeping template-based example generation:
 
@@ -61,12 +56,13 @@ gen = DataGenerator(task_inference_mode="llm")
 ```python
 gen = DataGenerator(example_generation_mode="llm")
 ```
+Both modes can be combined. If **task inference** is LLM-backed and the LLM call fails, the generator falls back to rule-based inference. If **example generation** is LLM-backed and the LLM fails, that example is generated via templates instead, so the generator always returns exactly `n` examples.
+- The llm endpoint is read from the `OLLAMA_HOST` environment variable. Unset defaults to `http://localhost:11434`. 
+- Ensure Ollama is reachable by running the `ollama serve` command.
 
-Both modes can be combined. If **task inference** is LLM-backed and the LLM call fails (Ollama unavailable, invalid JSON, timeout), the generator falls back to rule-based inference. If **example generation** is LLM-backed and the LLM fails for a given example (unreachable, timeout, or invalid response), that example is generated via templates instead, so the generator always returns exactly `n` examples.
+**Note A:** Without LLM capability, inference and generation is limited to set tasks and templates.
 
-**Note:** in template mode, classification is only supported for sentiment tasks (labels `positive`, `negative`, `neutral`). Non-sentiment classification requires `example_generation_mode="llm"`, since template-generated texts cannot be meaningfully tied to arbitrary label sets.
-
-The Ollama host is read from the `OLLAMA_HOST` environment variable (e.g. `172.21.112.1:11434`). Unset defaults to `http://localhost:11434`.
+**Note B:** With LLM capability enabled, example generation is often less accurate to the natural language description.
 
 ### Fine-tuning and evaluation
 
