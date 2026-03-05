@@ -338,7 +338,7 @@ class DataGenerator:
         company = self._rng.choice(self._COMPANIES)
         location = self._rng.choice(self._LOCATIONS)
 
-        # Deduplicate while preserving order.
+        # Deduplicate while preserving order for entity type requests.
         requested = list[str](dict.fromkeys(entity_labels or []))
 
         # For single-entity-type requests use focused templates so the text does

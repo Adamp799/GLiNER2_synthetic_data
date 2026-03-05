@@ -51,11 +51,7 @@ For multi-task composition we chose text concatenation over joint narrative gene
 
 ## Evaluation and results
 
-The notebook evaluates both the base and fine-tuned GLiNER2 models on the held-out synthetic set using two metrics:
-
-**Classification accuracy** is the fraction of examples where the model's predicted label exactly matches the gold label. Per-label accuracy is reported alongside overall accuracy to expose class-specific weaknesses.
-
-**Span match (entity-level)** applies when the eval data contains NER. Each `(label, span_text)` pair is treated as one span. Micro-averaged precision (matched predictions / total predictions), recall (matched gold / total gold), and F1 are computed over the full eval set. This metric is stricter than accuracy because a single missed or extra span affects the score.
+The notebook evaluates both the base and fine-tuned GLiNER2 models on the held-out synthetic set using **classification accuracy**: the fraction of examples where the model's predicted label exactly matches the gold label. Per-label accuracy is reported alongside overall accuracy to expose class-specific weaknesses.
 
 **Setup:** 150 training examples (50/50/50 per label) and 30 held-out evaluation examples (10/10/10 per label), generated with different seeds and no cross-split overlap. Fine-tuned for 3 epochs with batch size 8 (56 steps total).
 

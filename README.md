@@ -75,6 +75,6 @@ The notebook's fine-tuning section:
 1. Generates **150 training examples** and **30 evaluation examples** independently (different random seeds), with no example overlap between the two sets.
 2. Uses `generate_balanced_unique` — a helper that fills per-label quotas and deduplicates by content fingerprint — to guarantee strict label balance (50/50/50 for the 3-label sentiment task on 150 examples, 10/10/10 on 30).
 3. Fine-tunes `fastino/gliner2-base-v1` for 3 epochs on the training set.
-4. Evaluates both the **base model** and the **fine-tuned model** on the held-out set, reporting overall accuracy, per-label accuracy, and entity-level span P/R/F1 when applicable.
+4. Evaluates both the **base model** and the **fine-tuned model** on the held-out set, reporting overall and per-label classification accuracy.
 
 To generate a larger training set, change `TRAIN_N` and `EVAL_N` at the top of the data-generation cell. The sentiment template pool supports up to 192 unique examples (8 subjects × 8 outcomes × 3 labels); beyond that, switch to `example_generation_mode="llm"` for unlimited variety.
