@@ -1,8 +1,9 @@
 from __future__ import annotations
-import json
 import os
-import random
 import re
+import time
+import json
+import random
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -133,23 +134,46 @@ class DataGenerator:
         parsed = self._infer_tasks_via_llm(task_description) if self._task_inference_mode == "llm" else None
         if parsed is None:
             parsed = self._infer_tasks_rules(task_description)
+            if self._task_inference_mode == "llm":
+                print("Task inference fell back to rules (LLM unavailable or returned invalid response).")
         examples: list[Example] = []
 
         for idx in range(n):
             if self._example_generation_mode == "llm":
+                # Brief delay before 2nd+ example so Ollama can finish the previous request (reduces timeouts)
+                if idx > 0: time.sleep(1)
                 llm_example = self._generate_example_via_llm(parsed, task_description, idx)
+                # If we have an example but omitted entities we asked for, retry up to 2 more times.
+                if (llm_example is not None and parsed.ner and parsed.ner_entity_labels
+                    and not (llm_example.get("output") or {}).get("entities")):
+                    for _ in range(2):
+                        retry_ex = self._generate_example_via_llm(parsed, task_description, idx)
+                        if retry_ex and (retry_ex.get("output") or {}).get("entities"):
+                            llm_example = retry_ex
+                            break
                 if llm_example is not None:
                     examples.append(llm_example)
-                    continue
-                # LLM unreachable or returned invalid output — fall back to templates for this example
+                    continue # LLM generation successful, skip templates
+                print("Example generation fell back to templates for this example (LLM unreachable or returned invalid output).")
 
             text_pieces: list[str] = []
             output: OutputDict = {}
-        
+
+            # Only generate NER from templates when requested types are supported (company, person, location).
+            _template_ner = {"company", "person", "location"}
+            _requested_lower = set[str](lb.lower() for lb in (parsed.ner_entity_labels or []))
+            if parsed.ner and parsed.ner_entity_labels:
+                _unrecognised = [lb for lb in parsed.ner_entity_labels if lb.lower() not in _template_ner]
+                if _unrecognised: print("Entity types not in recognised set (no template):", ", ".join(_unrecognised))
+            _template_labels: list[str] | None = None
             if parsed.ner:
-                text, entities = self._generate_ner_example(parsed.ner_entity_labels)
-                text_pieces.append(text)
-                output["entities"] = entities
+                if not parsed.ner_entity_labels or _requested_lower <= _template_ner:
+                    _template_labels = parsed.ner_entity_labels
+                if _template_labels is not None:
+                    text, entities = self._generate_ner_example(_template_labels)
+                    text_pieces.append(text)
+                    output["entities"] = {k: [s.lower() for s in v] for k, v in entities.items()}
+                else: output["entities"] = {}
 
             if parsed.classification:
                 text, classifications = self._generate_classification_example(idx)
@@ -213,6 +237,15 @@ class DataGenerator:
                 ner_labels.append("person")
             if re.search(r"\blocations?\b|\bcit(?:y|ies)\b|\bcountr(?:y|ies)\b|\bplaces?\b", desc):
                 ner_labels.append("location")
+            # "X names" / "X name" → if X is not company/person/location (regex above), add X as a label anyway
+            # (LLM generation can use it; template generation will skip it and print unrecognised types).
+            from_name_phrase = re.findall(r"\b(\w+)\s+names?\b", desc)
+            _skip = {"sentiment", "positive", "negative", "neutral", "classify", "classification", "extract"}
+            _template_related = {"company", "companies", "person", "people", "location", "locations", "city", "cities", "country", "countries", "place", "places"}
+            for w in from_name_phrase:
+                if w in _skip or w in _template_related: continue
+                ner_labels.append(w.lower())
+            ner_labels = list[str](dict.fromkeys(ner_labels))
         if ner_labels or ner_generic:
             parsed.ner = True
             parsed.ner_entity_labels = ner_labels or None  # None → all three entity types
@@ -242,7 +275,9 @@ class DataGenerator:
             "Given a task description, return a JSON object specifying which task types "
             "are needed and their configuration. Fields:\n"
             '  "ner": true if entity extraction is needed\n'
-            '  "ner_entity_labels": list of entity type strings (e.g. ["company", "person"]), or null\n'
+            '  "ner_entity_labels": list of the EXACT entity types mentioned in the description or null (e.g. if it says '
+            '"supermarket names" use ["supermarket"]; if "company and person names" use ["company", "person"]). '
+            'You may only substitute company/person/location for equivalents (e.g. location = city, place).\n'
             '  "classification": true if text classification is needed\n'
             '  "classification_task_name": short snake_case name for the task, or null\n'
             '  "classification_labels": list of class label strings, or null\n'
@@ -301,7 +336,7 @@ class DataGenerator:
         ) if isinstance(labels, list) else None
         ner_labels = parsed.ner_entity_labels
         parsed.ner_entity_labels = (
-            [str(l).strip() for l in ner_labels if isinstance(l, str) and l.strip()] or None
+            [str(l).strip().lower() for l in ner_labels if isinstance(l, str) and l.strip()] or None
         ) if isinstance(ner_labels, list) else None
 
         if parsed.classification:
@@ -466,7 +501,7 @@ class DataGenerator:
             entity_labels = parsed.ner_entity_labels or ["<entity_type>"]
             output_schema_parts.append(
                 '"entities": {'
-                + ", ".join(f'"{l}": ["<span verbatim from input>"]' for l in entity_labels)
+                + ", ".join(f'"{l}": ["<exact substring from input>"]' for l in entity_labels)
                 + "}"
             )
         if parsed.classification:
@@ -492,8 +527,9 @@ class DataGenerator:
         ]
         if parsed.ner and parsed.ner_entity_labels:
             constraints.append(
-                f"- entities must use exactly these label keys: {json.dumps(parsed.ner_entity_labels)}."
+                f"- entities must use exactly these label keys (lowercase): {json.dumps(parsed.ner_entity_labels)}."
             )
+            constraints.append("- Use lowercase for all entity type keys and for all span text in the output.")
         if parsed.classification:
             constraints.append(
                 f'- true_label must be exactly ["{true_label}"] — do not change it.'
@@ -518,7 +554,7 @@ class DataGenerator:
         content = self._call_llm(
             [{"role": "system", "content": "You respond with a single JSON object only. No explanation."},
              {"role": "user", "content": prompt}],
-            timeout=60,
+            timeout=120,
         )
         if content is None: return None # LLM call failed.
         result = self._parse_json_response(content)
@@ -526,10 +562,12 @@ class DataGenerator:
 
         input_text = result.get("input")
         output = result.get("output")
-        if not isinstance(input_text, str) or not input_text.strip() or not isinstance(output, dict):
-            return None
+        if not isinstance(input_text, str) or not isinstance(output, dict): return None
+        # Strip placeholder artifacts the LLM sometimes leaves (e.g. leading "<" from "<text>").
+        input_text = input_text.strip().lstrip("<").rstrip(">").strip()
+        if not input_text: return None
 
-        # Enforce classification: overwrite task/labels/true_label regardless of LLM output.
+        # Enforce classification: we requested a specific true_label for balance; prompt asks LLM to generate matching text.
         if parsed.classification and true_label is not None:
             clss = output.get("classifications")
             enforced = {

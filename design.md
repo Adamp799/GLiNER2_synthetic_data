@@ -54,6 +54,8 @@ The two LLM opt-in modes (`task_inference_mode` and `example_generation_mode`) a
 
 For multi-task composition text concatenation was chosen over joint narrative generation because writing examples for each possible combination of tasks was not feasible. LLM generation mode produces multi-task narratives, but at the cost of less predictable output structure.
 
+Using a local Ollama model allows for more flexibility in usage and avoids third-party dependency, but the model is slower and less intelligent.
+
 ## Evaluation and results
 
 The notebook evaluates both the base and fine-tuned GLiNER2 models on the held-out synthetic set using **classification accuracy**: the fraction of examples where the model's predicted label exactly matches the gold label. Per-label accuracy is reported alongside overall accuracy to expose class-specific weaknesses.
